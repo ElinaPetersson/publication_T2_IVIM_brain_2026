@@ -2,15 +2,9 @@
 #%%
 import numpy as np
 import numpy.typing as npt
-from scipy.optimize import curve_fit, least_squares
-from scipy.linalg import solve
-from models import sIVIM, diffusive, ballistic, intermediate, sBallistic, sIVIM_jacobian, diffusive_jacobian, ballistic_jacobian, sBallistic_jacobian, check_regime, SIVIM_REGIME, DIFFUSIVE_REGIME, BALLISTIC_REGIME, INTERMEDIATE_REGIME, SBALLISTIC_REGIME
-from models import monoexp as monoexp_model
-from models import kurtosis as kurtosis_model
-from ivim.constants import Db
-from ivim.seq.sde import MONOPOLAR, BIPOLAR
+from models import sIVIM, SIVIM_REGIME
 from ivim.misc import halfSampleMode
-from ivim.io.base import data_from_file, file_from_data, read_im, read_time, read_k
+from ivim.io.base import data_from_file, file_from_data, read_im, read_time
 
 def bayes(im_file: str, bval_file: str, regime: str, roi_file: str | None = None, outbase: str | None = None, verbose: bool = False, fitK: bool = False, spatial_prior: bool = False, n: int = 2000, burns: int = 1000, ctm: str = 'mean', cval_file: str | None = None, TE_file: str | None = None, Covterm: bool = False) -> None:
     """
@@ -19,7 +13,7 @@ def bayes(im_file: str, bval_file: str, regime: str, roi_file: str | None = None
     Arguments:
         im_file:       path to nifti image file
         bval_file:     path to .bval file
-        regime:        IVIM regime to model: no (= sIVIM), diffusive (long encoding time) or ballistic (short encoding time)
+        regime:        IVIM regime to model: no (= sIVIM)
         roi_file:      (optional) path to nifti file defining a region-of-interest (ROI) from with data is extracted
         outbase:       (optional) basis for output filenames to which e.g. '_D.nii.gz' is added 
         verbose:       (optional) if True, diagnostics during fitting is printet to terminal
@@ -174,88 +168,49 @@ def bayes(im_file: str, bval_file: str, regime: str, roi_file: str | None = None
 
         return P,std
     
-    check_regime(regime)
 
-    if regime == BALLISTIC_REGIME:
-        Y, b, c = data_from_file(im_file, bval_file, cval_file=cval_file, roi_file=roi_file)
-    else:
-        Y, b = data_from_file(im_file, bval_file, roi_file = roi_file)
+    Y, b = data_from_file(im_file, bval_file, roi_file = roi_file)
     if TE_file is not None:
         TE = read_time(TE_file)
 
-
-    if regime == DIFFUSIVE_REGIME:
+    if TE_file is None:
         if fitK:
             def fn(X, P):
-                D, f, Dstar, S0, K = P[:, 0], P[:, 1], P[:, 2], P[:, 3], P[:, 4]
+                D, f, S0, K = P[:, 0], P[:, 1], P[:, 2], P[:, 3]
                 b = X
-                return diffusive(b, D, f, Dstar, S0, K)
+                return sIVIM(b, D, f, S0, K)
         else:
             def fn(X, P):
-                D, f, Dstar, S0 = P[:, 0], P[:, 1], P[:, 2], P[:, 3]
+                D, f, S0 = P[:, 0], P[:, 1], P[:, 2]
                 b = X
-                return diffusive(b, D, f, Dstar, S0)
-    elif regime == BALLISTIC_REGIME:
+                return sIVIM(b, D, f, S0)
+    else: ## NEW CODE for T2-sIVIM
         if fitK:
             def fn(X, P):
-                D, f, vd, S0, K = P[:, 0], P[:, 1], P[:, 2], P[:, 3], P[:, 4]
-                b, c = X[:, 0], X[:, 1]
-                return ballistic(b, c, D, f, vd, S0, K)
+                D, f, S0, K, T2d, T2p = P[:, 0], P[:, 1], P[:, 2], P[:, 3], P[:, 4], P[:, 5]
+                if Covterm:
+                    H = P[:,6]
+                else:
+                    H = None
+                b, TE = X[:,0], X[:,1]
+                return sIVIM(b, D, f, S0, K, TE=TE,T2d=T2d,T2p=T2p,H=H,Covterm=Covterm)
         else:
             def fn(X, P):
-                D, f, vd, S0 = P[:, 0], P[:, 1], P[:, 2], P[:, 3]
-                b, c = X[:, 0], X[:, 1]
-                return ballistic(b, c, D, f, vd, S0)
-    else:
-        if TE_file is None:
-            if fitK:
-                def fn(X, P):
-                    D, f, S0, K = P[:, 0], P[:, 1], P[:, 2], P[:, 3]
-                    b = X
-                    return sIVIM(b, D, f, S0, K)
-            else:
-                def fn(X, P):
-                    D, f, S0 = P[:, 0], P[:, 1], P[:, 2]
-                    b = X
-                    return sIVIM(b, D, f, S0)
-        else: ## NEW CODE for T2-sIVIM
-            if fitK:
-                def fn(X, P):
-                    D, f, S0, K, T2d, T2p = P[:, 0], P[:, 1], P[:, 2], P[:, 3], P[:, 4], P[:, 5]
-                    if Covterm:
-                        H = P[:,6]
-                    else:
-                        H = None
-                    b, TE = X[:,0], X[:,1]
-                    return sIVIM(b, D, f, S0, K, TE=TE,T2d=T2d,T2p=T2p,H=H,Covterm=Covterm)
-            else:
-                def fn(X, P):
-                    D, f, S0, T2d, T2p = P[:, 0], P[:, 1], P[:, 2], P[:, 3], P[:, 4]
-                    if Covterm:
-                        H = P[:,5]
-                    else:
-                        H = None
-                    b, TE = X[:,0], X[:,1]
-                    return sIVIM(b, D, f, S0, TE=TE,T2d=T2d,T2p=T2p,H=H,Covterm=Covterm)
+                D, f, S0, T2d, T2p = P[:, 0], P[:, 1], P[:, 2], P[:, 3], P[:, 4]
+                if Covterm:
+                    H = P[:,5]
+                else:
+                    H = None
+                b, TE = X[:,0], X[:,1]
+                return sIVIM(b, D, f, S0, TE=TE,T2d=T2d,T2p=T2p,H=H,Covterm=Covterm)
     
     npars = 4 + fitK - (regime == SIVIM_REGIME)+(TE_file is not None)*2+(Covterm)*1
     P0 = np.zeros((Y.shape[0], npars))
     P0[:, 0] = 1e-3 #D
     P0[:, 1] = 0.05 #f
     lims = np.array([[0, 0, 0], [3e-3, 1, 2*np.max(Y)]])
-    if regime == DIFFUSIVE_REGIME:
-        P0[:, 2] = 10e-3 #Dstar
-        lims = np.insert(lims, 2, [0, 1.0], axis = 1)
-        idxS0 = 3
-        idxK = 4
-    elif regime == BALLISTIC_REGIME:
-        P0[:, 2] = 2.0 # Vd
-        lims = np.insert(lims, 2, [0, 5.0], axis = 1)
-        idxS0 = 3
-        idxK = 4
-    else:
-        idxS0 = 2
-        idxK = 3
+    idxS0 = 2
+    idxK = 3
     P0[:, idxS0] = np.mean(Y[:, b==0], axis = 1)
     if fitK:
         P0[:, idxK] = 1.0 #K
@@ -276,19 +231,14 @@ def bayes(im_file: str, bval_file: str, regime: str, roi_file: str | None = None
             P0[:,idxH] = 1e-3
             lims = np.hstack((lims, np.array([-10e-3, 10e-3])[:, np.newaxis])) #H
     
-    if regime == BALLISTIC_REGIME:
-        X = np.stack((b, c), axis=1)
-    elif TE_file is not None:
+    
+    if TE_file is not None:
         X = np.stack((b, TE),axis=1)
     else:
         X = b
     P,_ = _estimation(fn, Y, X, P0, lims, n=n, burns=burns, ctm=ctm, spatial_prior=spatial_prior, roi=read_im(roi_file), verbose=verbose)
   
     pars = {'D': P[:, 0], 'f': P[:, 1], 'S0': P[:, idxS0]}
-    if regime == DIFFUSIVE_REGIME:
-        pars['Dstar'] = P[:, 2]
-    if regime == BALLISTIC_REGIME:
-        pars['vd'] = P[:, 2]
     if fitK:
         pars['K'] = P[:, idxK]
     if TE_file is not None:

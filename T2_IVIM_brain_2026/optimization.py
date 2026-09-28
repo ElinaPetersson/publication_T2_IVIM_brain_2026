@@ -7,8 +7,7 @@ File contains:
 import numpy as np
 import numpy.typing as npt
 from scipy.optimize import minimize, Bounds
-from models import sIVIM_jacobian, check_regime, SIVIM_REGIME, INTERMEDIATE_REGIME
-from ivim.seq.sde import calc_c, G_from_b, MONOPOLAR, BIPOLAR
+from models import sIVIM_jacobian, check_regime, SIVIM_REGIME
 from ivim.constants import y as gamma
 import time
 
@@ -19,15 +18,22 @@ def crlb(D: npt.NDArray[np.float64], f: npt.NDArray[np.float64], regime: str,
          T2d: npt.NDArray[np.float64] | None = None,T2p: npt.NDArray[np.float64] | None = None,
          H: npt.NDArray[np.float64] | None = None, Covterm: bool = False):
     """
-    Optimize b-values (and possibly c-values) using Cramer-Rao lower bounds optmization.
+    Optimize b-values (and possibly TE) using Cramer-Rao lower bounds optmization.
     Arguments:
         D:           diffusion coefficients to optimize over [mm2/s]
         f:           perfusion fractions to optimize over (same size as D)
-        regime:      IVIM regime to model: no (= sIVIM), diffusive (long encoding time) or ballistic (short encoding time)
+        regime:      IVIM regime to model: no (= sIVIM)
         bmax:        (optional) the largest b-value that can be returned by the optimization
         fitK:        (optional) if True, optimize with the intention to be able to fit K in addition to D and f
         K:           (optional) kurtosis coefficients to optimize over if fitK and for bias term if minbias
+        Dstar:       (optional) pseudo-diffusion coefficients to optimize over (same size as D)
         SNR:         (optional) expected SNR level at b = 0 to be used to scale the influence of the bias term
+        T2d:         (optional) T2 decay of the diffusion compartment to optimize over (same size as D)
+        T2p:         (optional) T2 decay of the perfusion compartment to optimize over (same size as D)
+        H:           (optional) covariance parameter to optimize over (same size as D)
+        Covterm:     (optional) if True, include the covariance term in the calculation
+        usr_input:   (optional) dictionary with scanner limitations to be used as constraints in the optimization
+        nb_total:    (optional) total number of b-values to optimize over, including b = 0
     ---- sIVIM regime ----
         bthr:        (optional) the smallest non-zero b-value that can be returned by the optimization
     """
@@ -49,11 +55,6 @@ def crlb(D: npt.NDArray[np.float64], f: npt.NDArray[np.float64], regime: str,
         b = np.tile(b,nte)
         a = np.tile(a,nte)
         TE = np.repeat(TE,nb)
-
-        # EP: Calculate cvalues and k & T if bias_regime == intermediate model:
-        r = np.roots([2/3, usr_input['t_180']+usr_input['t_rise'],0,-max(b)*1e6/(gamma**2*usr_input['Gmax']**2)])
-        delta = r[(r.real>=0)*(r.imag == 0)][0].real
-        Delta = delta + usr_input['t_180']+usr_input['t_rise']
 
         S0 = np.ones_like(D)
         if regime == SIVIM_REGIME:
