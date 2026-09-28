@@ -1,5 +1,4 @@
 """ Functions to generate MR signal and corresponding Jacobians based on IVIM parameters. 
-    20250401: same as OPT_00_models_new but with T2 relaxation too!
 """
 
 import numpy as np

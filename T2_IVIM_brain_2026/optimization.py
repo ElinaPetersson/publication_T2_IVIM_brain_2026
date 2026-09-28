@@ -1,9 +1,9 @@
 """
 File contains:
- - Function crlb: remastered function from Oscar to minmize the crlb
+ - Function crlb: remastered function from Oscar Jalnefjord to minmize the crlb
  - code to run the optimization and save the results
 """
-#%% 
+#%%
 import numpy as np
 import numpy.typing as npt
 from scipy.optimize import minimize, Bounds
@@ -62,8 +62,6 @@ def crlb(D: npt.NDArray[np.float64], f: npt.NDArray[np.float64], regime: str,
             else:
                 J = sIVIM_jacobian(b, D, f, S0 , TE = TE, T2d = T2d, T2p = T2p,Covterm=Covterm,H=H)
         # EP: handle steps that make F non-invertible:
-        # EP: changed from a -> a*nb to get amount of each b
-        # EP: changed from a*nb -> a*14
         F = ((a*nb_total)[np.newaxis,np.newaxis,:]*J.transpose(0,2,1))@J
 
         try:
