@@ -228,8 +228,8 @@ def bayes(im_file: str, bval_file: str, regime: str, roi_file: str | None = None
         lims = np.hstack((lims, np.array([5e-3, 500e-3])[:, np.newaxis])) #T2p
         if Covterm:
             idxH = idxT2p+1
-            P0[:,idxH] = 1e-3
-            lims = np.hstack((lims, np.array([-10e-3, 10e-3])[:, np.newaxis])) #H
+            P0[:,idxH] = 1
+            lims = np.hstack((lims, np.array([-10, 10])[:, np.newaxis])) #H
     
     
     if TE_file is not None:
