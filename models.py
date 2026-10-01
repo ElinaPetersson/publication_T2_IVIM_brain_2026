@@ -81,7 +81,7 @@ def sIVIM(b: npt.NDArray[np.float64], D: npt.NDArray[np.float64], f: npt.NDArray
             return S0*((1-f) * kurtosis(b,D,K,TE,T2d) + f * np.exp(-TE/T2p)*(b==0))
         else:
             [H] = at_lest_right_dim_tissue([H])
-            return S0*((1-f) * kurtosis(b,D,K,TE,T2d) * np.exp(-TE*b*H) + f * np.exp(-TE/T2p)*(b==0))
+            return S0*((1-f) * kurtosis(b,D,K,TE,T2d) * np.exp(-TE*b*H*D/T2d) + f * np.exp(-TE/T2p)*(b==0))
 
 
 def monoexp_jacobian(b: npt.NDArray[np.float64], D: npt.NDArray[np.float64], TE: npt.NDArray[np.float64] | None = None, T2d: npt.NDArray[np.float64] | None = None) -> npt.NDArray[np.float64]:
@@ -111,8 +111,8 @@ def monoexp_jacobian(b: npt.NDArray[np.float64], D: npt.NDArray[np.float64], TE:
 
 def kurtosis_jacobian(b: npt.NDArray[np.float64], D: npt.NDArray[np.float64], K: npt.NDArray[np.float64], TE: npt.NDArray[np.float64] | None = None, T2d: npt.NDArray[np.float64] | None = None) -> npt.NDArray[np.float64]:
     """ 
-    Return the Jacobian matrix for the monoexponential expression.
-    
+    Return the Jacobian matrix for the kurtosis expression.
+
     S(b) = exp(-b*D + b**2*D**2*K/6)
 
     Arguments:
@@ -231,24 +231,7 @@ def sIVIM_jacobian(b: npt.NDArray[np.float64], D: npt.NDArray[np.float64], f: np
                     dSdS0 = sIVIM(b, D, f,K=K,TE=TE,T2d=T2d,T2p=T2p)
                     J_list = [dSdD,dSdf,dSdS0,dSdK,dSdT2d,dSdT2p]
         elif Covterm and H is not None:
-            [H] = at_lest_right_dim_tissue([H])
-            dSdD = (1-f) * monoexp_jacobian(b,D,TE,T2d)[0]*np.exp(-TE*b*H)
-            dSdf = -monoexp(b,D,TE,T2d)*np.exp(-TE*b*H) + np.exp(-TE/T2p) * (b==0)
-            dSdT2d = (1-f) * monoexp_jacobian(b,D,TE,T2d)[1]*np.exp(-TE*b*H)
-            dSdT2p = f * TE/T2p**2 * np.exp(-TE/T2p) * (b==0)
-            dSdH = -(1-f) * TE * b * monoexp(b,D,TE,T2d) * np.exp(-TE*b*H)
-            if S0 is None:
-                J_list = [dSdD,dSdf,dSdT2d,dSdT2p,dSdH]
-            else:
-                [S0] = at_least_1d([S0])
-                [S0] = at_lest_right_dim_tissue([S0])
-                dSdD *= S0
-                dSdf *= S0
-                dSdT2d *= S0
-                dSdT2p *= S0 
-                dSdH *= S0
-                dSdS0 = sIVIM(b, D, f,TE=TE,T2d=T2d,T2p=T2p, Covterm=Covterm, H=H)
-                J_list = [dSdD,dSdf,dSdS0,dSdT2d,dSdT2p,dSdH]
+           raise NotImplementedError('Covterm not implemented yet')
         J = np.stack(J_list, axis=-1)
         return J
 
